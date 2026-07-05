@@ -3145,30 +3145,62 @@ void Connection::OnRecvNotification(const util::FiberSocketBase::RecvNotificatio
            << " pending_input=" << pending_input_;
   ProcessRecvNotification(n);
 
-  if (!IsOverPipelineLimit()) {
-    // Drain the socket while the fiber is suspended (no-op when io_buf_ is full / no append room).
-    const size_t before = io_buf_.InputLen();
+  // Parse newly-arrived bytes in the proactor only while the fiber is parked in a squash hop:
+  // there the parser is idle and the fiber is blocked waiting for the squashed batch to run on the
+  // shard threads, so parsing here overlaps with that execution. That is real parallelism (the next
+  // commands are parsed while earlier ones run on other cores), not just larger batching.
+  const bool parse_in_proactor = pipeline_parse_in_proactor_cached && redis_parser_ &&
+                                 (fiber_park_spot_ == FiberParkSpot::kSquashHop);
+
+  // Read+parse loop: ParseRedis consumes io_buf_ (freeing space via ConsumeInput), which lets the
+  // next ReadPendingInput pull more from the socket even though io_buf_ is capacity-bounded. Keep
+  // going until IsOverPipelineLimit() (the per-thread / per-connection memory guard) trips or a
+  // round reads no new bytes. No CPU/time quota yet - we want the unbounded behavior to measure the
+  // pure impact; a starvation/fairness bound can be added later.
+  while (!IsOverPipelineLimit()) {
+    // Drain the socket while the fiber is suspended. This is a no-op (and makes no syscall) when
+    // pending_input_ is already false - the socket is drained (EAGAIN), closed, or aborted - so
+    // looping back here in that case costs nothing.
+    const size_t before_read = io_buf_.InputLen();
     ReadPendingInput();
-    if (io_buf_.InputLen() > before)
+    if (io_buf_.InputLen() > before_read)
       ++GetLocalConnStats().proactor_reads;
 
-    // Parse In Proactor: parse newly-read bytes while the fiber is parked in a squash hop, so the
-    // next batch is already larger on resume.
-    // - This is safe because the parser is idle at kSquashHop.
-    // - Calling ParseRedis() with max_busy_cycles==0: proactor's callbacks must not suspend.
-    if (pipeline_parse_in_proactor_cached && (fiber_park_spot_ == FiberParkSpot::kSquashHop) &&
-        redis_parser_ && (io_buf_.InputLen() > 0)) {
-      size_t cmds_before = parsed_cmd_q_len_;
+    // Not parked in a squash hop: parsing isn't safe here, so just drain once and let the fiber
+    // parse on resume.
+    if (!parse_in_proactor)
+      break;
+
+    // Parse whatever is buffered - gated on InputLen, not on this round having read anything. On
+    // the first round io_buf_ may already hold commands buffered before an error/abort, and we want
+    // them parsed (and later replied) before we stop.
+    if (io_buf_.InputLen() > 0) {
+      // max_busy_cycles==0: proactor callbacks must never suspend, and a cycle budget would be
+      // meaningless here - GetRunningTimeCycles() spans the whole proactor turn (many connections),
+      // not this connection's parse work.
+      const size_t cmds_before = parsed_cmd_q_len_;
       ParserStatus st = ParseRedis(io_buf_, 0, /*enqueue_only=*/true);
       if (parsed_cmd_q_len_ > cmds_before)
         ++GetLocalConnStats().proactor_parse;
-      // The recv callback cannot return a status. If parsing hit a protocol error, flag it so
-      // IoLoopV2 surfaces ParserStatus::ERROR and sends the protocol-error reply.
-      if (st == ERROR)
-        proactor_parse_error_ = true;
       DVLOG(1) << CONN_ID << "Parse-in-proactor added " << (parsed_cmd_q_len_ - cmds_before)
                << " commands, pq_len=" << parsed_cmd_q_len_;
+      // The recv callback cannot return a status. Surface a protocol error via the flag so IoLoopV2
+      // reports ParserStatus::ERROR and sends the protocol-error reply, then stop.
+      if (st == ERROR) {
+        proactor_parse_error_ = true;
+        break;
+      }
     }
+
+    // Continue only if the socket may still have data and there is no I/O error. pending_input_ is
+    // the only source of new bytes (set on a recv completion, cleared when TryRecv hits EAGAIN or
+    // EOF); when it is false nothing can grow io_buf_ and ParseRedis already drained it, so we stop
+    // instead of looping into a no-op. io_ec_ catches a hard recv error, where ReadPendingInput
+    // leaves pending_input_ set - without it we would spin retrying a broken socket. If
+    // pending_input_ is still true, io_buf_ just filled up and ParseRedis freed space, so the next
+    // ReadPendingInput can pull more.
+    if (!pending_input_ || io_ec_)
+      break;
   }
 
   io_event_.notify();
@@ -3223,8 +3255,10 @@ void Connection::ReadPendingInput() {
       // TryRecv is non-blocking: it returns EAGAIN/EWOULDBLOCK when nothing is ready.
       if (ec == errc::resource_unavailable_try_again || ec == errc::operation_would_block)
         pending_input_ = false;
-      else
+      else {
         io_ec_ = ec;
+        pending_input_ = false;  // hard error: nothing more to read
+      }
       break;
     }
 
