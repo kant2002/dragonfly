@@ -378,4 +378,15 @@ absl::flat_hash_map<std::string, CmdCallStats> CommandRegistry::NamedCallStats(
   return res;
 }
 
+void CommandRegistry::SetFamilyNames(vector<string> names) {
+  CHECK_EQ(names.size(), acl::NumberOfFamilies());
+  family_names_ = std::move(names);
+}
+
+optional<string_view> CommandRegistry::FamilyName(size_t family) const {
+  if (family >= family_names_.size())
+    return nullopt;
+  return family_names_[family];
+}
+
 }  // namespace dfly

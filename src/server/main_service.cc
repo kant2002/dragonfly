@@ -3033,6 +3033,20 @@ void Service::RegisterCommands() {
   // If we add a new familly, register that first above and *not* below
   acl_family_.Register(&registry_);
 
+  registry_.SetFamilyNames({
+      "core",    "server", "generic",     "list",   "string",
+#ifdef WITH_COLLECTION_CMDS
+      "set",     "hash",   "sorted_set",  "stream",
+#endif
+#ifdef WITH_EXTENSION_CMDS
+      "geo",     "bitmap", "hyperloglog", "bloom",  "cms",    "topk", "cuckoo_filter", "json",
+#endif
+#ifdef WITH_SEARCH
+      "search",
+#endif
+      "cluster", "acl",
+  });
+
   // Only after all the commands are registered
   registry_.Init(pp_.size());
 

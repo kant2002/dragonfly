@@ -257,6 +257,36 @@ void Metrics::Print(uint64_t uptime, const CommandRegistry* registry, DflyCmd* d
       absl::StrAppend(&resp->body(), type_used_memory_metric);
   }
 
+  {
+    string command_family_memory_metric;
+    bool added = false;
+    AppendMetricHeader("command_family_memory_delta_bytes",
+                       "Signed cumulative memory delta per command family", MetricType::GAUGE,
+                       &command_family_memory_metric);
+
+    for (size_t family = 0; family < m.command_family_mem_delta.size(); ++family) {
+      const int64_t delta = m.command_family_mem_delta[family];
+      if (delta == 0)
+        continue;
+
+      string fallback_name;
+      string_view family_name;
+      if (optional<string_view> name = registry->FamilyName(family); name.has_value()) {
+        family_name = *name;
+      } else {
+        fallback_name = StrCat("family_", family);
+        family_name = fallback_name;
+      }
+
+      AppendMetricValue("command_family_memory_delta_bytes", delta, {"family"}, {family_name},
+                        &command_family_memory_metric);
+      added = true;
+    }
+
+    if (added)
+      absl::StrAppend(&resp->body(), command_family_memory_metric);
+  }
+
   // Stats metrics
   AppendMetricWithoutLabels("connections_received_total", "", conn_stats.conn_received_cnt,
                             MetricType::COUNTER, &resp->body());

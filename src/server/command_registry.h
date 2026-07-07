@@ -11,6 +11,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/function2.hpp"
@@ -363,6 +364,9 @@ class CommandRegistry {
   absl::flat_hash_map<std::string, CmdCallStats> NamedCallStats(
       const std::vector<CmdCallStats>& merged) const;
 
+  void SetFamilyNames(std::vector<std::string> names);
+  std::optional<std::string_view> FamilyName(size_t family) const;
+
   void StartFamily(std::optional<uint32_t> acl_category = std::nullopt);
 
   using FamiliesVec = std::vector<std::vector<std::string>>;
@@ -377,6 +381,7 @@ class CommandRegistry {
   absl::flat_hash_set<std::string> restricted_cmds_;
 
   FamiliesVec family_of_commands_;
+  std::vector<std::string> family_names_;
   size_t bit_index_;
   std::optional<uint32_t> acl_category_;  // category of family currently being built
 };
