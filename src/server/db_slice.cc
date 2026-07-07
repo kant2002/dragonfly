@@ -29,6 +29,7 @@ extern "C" {
 #include "server/journal/journal.h"
 #include "server/server_state.h"
 #include "server/tiered_storage.h"
+#include "server/transaction.h"
 #include "strings/human_readable.h"
 #include "util/fibers/fibers.h"
 #include "util/fibers/stacktrace.h"
@@ -327,7 +328,12 @@ int32_t AsyncDeleter::IdleCb() {
 
   auto* current = head_;
   DVLOG(2) << "IdleCb " << current->cursor;
-  if (current->step(current)) {
+  bool done = false;
+  {
+    auto mem_accounting = CommandMemoryAccountingScope::Gap();
+    done = current->step(current);
+  }
+  if (done) {
     head_ = current->next;
     delete current;
   }
