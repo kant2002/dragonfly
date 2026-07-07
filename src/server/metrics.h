@@ -119,6 +119,9 @@ struct Metrics {
   // names at print time via CommandRegistry::NamedCallStats.
   std::vector<std::pair<uint64_t, uint64_t>> cmd_call_stats;
 
+  // Signed memory deltas attributed to command families, indexed by CommandId::GetFamily().
+  std::vector<int64_t> command_family_mem_delta;
+
   absl::flat_hash_map<std::string, uint64_t> connections_lib_name_ver_map;
 
   struct ReplicaInfo {

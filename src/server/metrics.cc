@@ -707,17 +707,17 @@ void Metrics::Merge(const Metrics& src) {
   // Expressed via sizeof so it adapts to different STL/Abseil implementations.
   // If this fires, a field was added/removed - update Merge() and InitFromThread().
   static_assert(
-      sizeof(Metrics) == sizeof(SliceEvents) + sizeof(std::vector<DbStats>) +
-                             sizeof(EngineShard::Stats) + sizeof(facade::FacadeStats) +
-                             sizeof(TieredStats) + sizeof(SearchStats) +
-                             sizeof(ServerState::Stats) + sizeof(PeakStats) + sizeof(QList::Stats) +
-                             sizeof(ReplicationMemoryStats) + sizeof(InterpreterManager::Stats) +
-                             sizeof(std::vector<std::pair<uint64_t, uint64_t>>) +
-                             sizeof(absl::flat_hash_map<std::string, uint64_t>) +
-                             sizeof(std::optional<Metrics::ReplicaInfo>) + sizeof(LoadingStats) +
-                             sizeof(absl::flat_hash_map<std::string, hdr_histogram*>) +
-                             sizeof(InternedStringStats) + sizeof(acl::UserRegistry::AclStats) +
-                             176,  // scalar fields (19 fields) + 4-byte alignment padding
+      sizeof(Metrics) ==
+          sizeof(SliceEvents) + sizeof(std::vector<DbStats>) + sizeof(EngineShard::Stats) +
+              sizeof(FacadeStats) + sizeof(TieredStats) + sizeof(SearchStats) +
+              sizeof(ServerState::Stats) + sizeof(PeakStats) + sizeof(QList::Stats) +
+              sizeof(ReplicationMemoryStats) + sizeof(InterpreterManager::Stats) +
+              sizeof(std::vector<std::pair<uint64_t, uint64_t>>) + sizeof(std::vector<int64_t>) +
+              sizeof(absl::flat_hash_map<std::string, uint64_t>) +
+              sizeof(std::optional<ReplicaInfo>) + sizeof(LoadingStats) +
+              sizeof(absl::flat_hash_map<std::string, hdr_histogram*>) +
+              sizeof(InternedStringStats) + sizeof(acl::UserRegistry::AclStats) +
+              176,  // scalar fields (19 fields) + 4-byte alignment padding
       "Metrics size changed - update Merge() and InitFromThread()");
 
   // Per-db stats / events / small_string_bytes are merged element-wise.
@@ -771,23 +771,28 @@ void Metrics::Merge(const Metrics& src) {
     cmd_call_stats[i].first += src.cmd_call_stats[i].first;
     cmd_call_stats[i].second += src.cmd_call_stats[i].second;
   }
+
+  if (src.command_family_mem_delta.size() > command_family_mem_delta.size())
+    command_family_mem_delta.resize(src.command_family_mem_delta.size());
+  for (size_t i = 0; i < src.command_family_mem_delta.size(); ++i)
+    command_family_mem_delta[i] += src.command_family_mem_delta[i];
 }
 
 void Metrics::InitFromThread(Namespace* ns, const CommandRegistry* registry,
                              unsigned proactor_index, const MetricsCollectOpts& opts,
                              DflyCmd* dfly_cmd) {
   static_assert(
-      sizeof(Metrics) == sizeof(SliceEvents) + sizeof(std::vector<DbStats>) +
-                             sizeof(EngineShard::Stats) + sizeof(facade::FacadeStats) +
-                             sizeof(TieredStats) + sizeof(SearchStats) +
-                             sizeof(ServerState::Stats) + sizeof(PeakStats) + sizeof(QList::Stats) +
-                             sizeof(ReplicationMemoryStats) + sizeof(InterpreterManager::Stats) +
-                             sizeof(std::vector<std::pair<uint64_t, uint64_t>>) +
-                             sizeof(absl::flat_hash_map<std::string, uint64_t>) +
-                             sizeof(std::optional<Metrics::ReplicaInfo>) + sizeof(LoadingStats) +
-                             sizeof(absl::flat_hash_map<std::string, hdr_histogram*>) +
-                             sizeof(InternedStringStats) + sizeof(acl::UserRegistry::AclStats) +
-                             176,  // scalar fields (19 fields) + 4-byte alignment padding
+      sizeof(Metrics) ==
+          sizeof(SliceEvents) + sizeof(std::vector<DbStats>) + sizeof(EngineShard::Stats) +
+              sizeof(FacadeStats) + sizeof(TieredStats) + sizeof(SearchStats) +
+              sizeof(ServerState::Stats) + sizeof(PeakStats) + sizeof(QList::Stats) +
+              sizeof(ReplicationMemoryStats) + sizeof(InterpreterManager::Stats) +
+              sizeof(std::vector<std::pair<uint64_t, uint64_t>>) + sizeof(std::vector<int64_t>) +
+              sizeof(absl::flat_hash_map<std::string, uint64_t>) +
+              sizeof(std::optional<ReplicaInfo>) + sizeof(LoadingStats) +
+              sizeof(absl::flat_hash_map<std::string, hdr_histogram*>) +
+              sizeof(InternedStringStats) + sizeof(acl::UserRegistry::AclStats) +
+              176,  // scalar fields (19 fields) + 4-byte alignment padding
       "Metrics size changed - update Merge() and InitFromThread()");
   EngineShard* shard = EngineShard::tlocal();
   ServerState* ss = ServerState::tlocal();
@@ -813,6 +818,7 @@ void Metrics::InitFromThread(Namespace* ns, const CommandRegistry* registry,
     events = slice_stats.events;
     small_string_bytes = slice_stats.small_string_bytes;
     shard_stats = shard->stats();
+    command_family_mem_delta = shard->command_family_mem_delta();
 
     if (shard->tiered_storage()) {
       tiered_stats = shard->tiered_storage()->GetStats();
