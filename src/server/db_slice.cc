@@ -920,7 +920,11 @@ void DbSlice::FlushSlotsFb(const cluster::SlotSet& slot_ids, uint64_t next_versi
   PrimeTable::Cursor cursor;
 
   do {
-    PrimeTable::Cursor next = pt->TraverseBuckets(cursor, iterate_bucket);
+    PrimeTable::Cursor next;
+    {
+      auto mem_accounting = CommandMemoryAccountingScope::Gap();
+      next = pt->TraverseBuckets(cursor, iterate_bucket);
+    }
     cursor = next;
     ThisFiber::Yield();
   } while (cursor && etl.gstate() != GlobalState::SHUTTING_DOWN);
@@ -1021,7 +1025,10 @@ util::fb2::Fiber DbSlice::FlushDbIndexes(const std::vector<DbIndex>& indexes) {
     VLOG(2) << "Drakarys shard " << shard_id << " cb entered (pre-destructors)"
             << " rss="
             << strings::HumanReadableNumBytes(rss_mem_current.load(std::memory_order_relaxed));
-    flush_db_arr.clear();
+    {
+      auto mem_accounting = CommandMemoryAccountingScope::Gap();
+      flush_db_arr.clear();
+    }
     ServerState::tlocal()->DecommitMemory(ServerState::kDataHeap | ServerState::kBackingHeap |
                                           ServerState::kGlibcmalloc);
     VLOG(2) << "Drakarys shard " << shard_id << " finished decommit"

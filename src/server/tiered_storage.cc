@@ -29,6 +29,7 @@
 #include "server/tiering/decoders.h"
 #include "server/tiering/op_manager.h"
 #include "server/tiering/small_bins.h"
+#include "server/transaction.h"
 #include "strings/human_readable.h"
 
 extern "C" {
@@ -214,6 +215,8 @@ class TieredStorage::ShardOpManager : public tiering::OpManager {
 
   void NotifyStashed(const OwnedEntryId& id,
                      const io::Result<tiering::DiskSegment>& segment) override {
+    auto mem_accounting = CommandMemoryAccountingScope::Gap();
+
     if (!segment) {
       VLOG(1) << "Stash failed " << segment.error().message();
       visit([this](auto id) { ClearStashPending(id); }, id);
