@@ -1232,7 +1232,7 @@ void BM_Scan(benchmark::State& state) {
     size_t seen = 0;
     do {
       cursor = ss.Scan(cursor, [&](auto key) {
-        benchmark::DoNotOptimize(key);
+        benchmark::DoNotOptimize(key.size());
         ++seen;
       });
     } while (cursor != 0);

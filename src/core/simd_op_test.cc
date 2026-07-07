@@ -70,6 +70,14 @@ TEST(SimdOpTest, ToBitsLsbIsLaneZero) {
   EXPECT_EQ((v == uint64_t(42)).GetMSBs(), 0x1u);
 }
 
+TEST(SimdOpTest, GetMSBsReadsLaneSignBits) {
+  // GetMSBs extracts each lane's sign bit (bit 63), not "is non-zero" -- lane 1 (0x7FFF..) has
+  // its low bits set but bit 63 clear, so it must not appear in the mask.
+  std::uint64_t arr[4] = {0x8000000000000000ULL, 0x7FFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0};
+  EXPECT_EQ(U64x4::Load(arr).GetMSBs(), 0b0101u);
+  EXPECT_EQ(U64x2::Load(arr).GetMSBs(), 0b0001u);
+}
+
 TEST(SimdOpTest, U64x2WorksForVectorSearch) {
   // The 2-lane version is used by OAHSet::ProbeExtensionVector.
   std::uint64_t arr[2] = {0xDEAD, 0xBEEF};

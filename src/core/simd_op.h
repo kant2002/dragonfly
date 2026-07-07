@@ -71,9 +71,9 @@ template <class T, std::size_t N> class SimdOp {
     return Vec(v_ == (Vec{} + value));
   }
 
-  // Packs the most-significant bit of every lane into a uint32_t bitmask
-  // (LSB = lane 0). For the output of `operator==` (lanes are all-ones or
-  // all-zeros) this is equivalent to "bit i set iff lane i is non-zero".
+  // Packs the most-significant bit (bit 63) of every lane into a uint32_t bitmask
+  // (LSB = lane 0), matching x86 movemask semantics on all ISAs. For the output of
+  // `operator==` (lanes all-ones or all-zeros) this equals "bit i set iff lane i is non-zero".
   BitsType GetMSBs() const noexcept {
     // We hand-write the per-ISA movemask because no portable C++ /
     // vector-extension formulation lowers to a single movemask instruction
@@ -99,13 +99,13 @@ template <class T, std::size_t N> class SimdOp {
       uint32x2_t narrow = vshrn_n_u64(halves[h], 32);
       std::uint64_t packed;
       std::memcpy(&packed, &narrow, sizeof(packed));
-      bits |= (static_cast<BitsType>((packed & 1u) | ((packed >> 31) & 2u))) << (2 * h);
+      bits |= (static_cast<BitsType>(((packed >> 31) & 1u) | ((packed >> 62) & 2u))) << (2 * h);
     }
     return bits;
 #else
     BitsType m = 0;
     for (std::size_t i = 0; i < N; ++i)
-      m |= static_cast<BitsType>(v_[i] != 0) << i;
+      m |= static_cast<BitsType>(static_cast<std::make_unsigned_t<T> >(v_[i]) >> 63) << i;
     return m;
 #endif
   }
