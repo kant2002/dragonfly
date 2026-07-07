@@ -366,6 +366,8 @@ void TieredStorage::ShardOpManager::Defragment(tiering::DiskSegment segment, str
 bool TieredStorage::ShardOpManager::NotifyFetched(const OwnedEntryId& id,
                                                   tiering::DiskSegment segment,
                                                   tiering::Decoder* decoder) {
+  auto mem_accounting = CommandMemoryAccountingScope::Gap();
+
   ++stats_.total_fetches;
 
   if (const auto* i = std::get_if<uintptr_t>(&id); i) {

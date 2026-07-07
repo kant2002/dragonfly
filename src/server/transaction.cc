@@ -63,9 +63,8 @@ CommandMemoryAccountingScope::CommandMemoryAccountingScope(std::optional<size_t>
 }
 
 CommandMemoryAccountingScope::~CommandMemoryAccountingScope() {
-  if (generation_ != mem_accounting_generation) {
+  if (generation_ != mem_accounting_generation)
     return;
-  }
 
   if (current_mem_accounting_scope != this) {
     AbortCommandMemoryAccounting();
@@ -73,15 +72,13 @@ CommandMemoryAccountingScope::~CommandMemoryAccountingScope() {
   }
 
   DCHECK_EQ(shard_, EngineShard::tlocal());
-  int64_t delta = shard_->UsedMemoryForCommandAccounting() - baseline_;
+  const int64_t delta = shard_->UsedMemoryForCommandAccounting() - baseline_;
 
-  if (family_) {
+  if (family_.has_value())
     shard_->AddCommandFamilyMemDelta(*family_, delta);
-  }
 
-  if (parent_) {
+  if (parent_)
     parent_->baseline_ += delta;
-  }
 
   current_mem_accounting_scope = parent_;
 }
