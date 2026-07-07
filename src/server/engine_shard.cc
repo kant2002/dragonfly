@@ -1097,6 +1097,20 @@ size_t EngineShard::UsedMemory() const {
          search_indices()->GetUsedMemory();
 }
 
+int64_t EngineShard::UsedMemoryForCommandAccounting() const {
+  return static_cast<int64_t>(mi_resource_.used()) + zmalloc_used_memory_tl;
+}
+
+void EngineShard::AddCommandFamilyMemDelta(size_t family, int64_t delta) {
+  if (delta == 0)
+    return;
+
+  if (family >= command_family_mem_delta_.size())
+    command_family_mem_delta_.resize(family + 1);
+
+  command_family_mem_delta_[family] += delta;
+}
+
 bool EngineShard::ShouldThrottleForTiering() const {
   // Throttle if the tiered storage is busy offloading (at least 30% of allowed capacity)
   return tiered_storage_ && tiered_storage_->WriteDepthUsage() > 0.3 &&

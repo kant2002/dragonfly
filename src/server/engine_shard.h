@@ -128,6 +128,14 @@ class EngineShard {
   // Calculate memory used by shard by summing multiple sources
   size_t UsedMemory() const;
 
+  int64_t UsedMemoryForCommandAccounting() const;
+
+  void AddCommandFamilyMemDelta(size_t family, int64_t delta);
+
+  const std::vector<int64_t>& command_family_mem_delta() const {
+    return command_family_mem_delta_;
+  }
+
   TieredStorage* tiered_storage() {
     return tiered_storage_.get();
   }
@@ -317,6 +325,8 @@ class EngineShard {
   Transaction* continuation_trans_ = nullptr;
   Transaction* running_tx_ = nullptr;
   bool needs_repoll_ = false;  // set when running_tx_ interrupted a PollExecution call
+
+  std::vector<int64_t> command_family_mem_delta_;
 
   std::string continuation_debug_id_;
   unsigned poll_concurrent_factor_ = 0;
