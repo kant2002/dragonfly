@@ -961,6 +961,7 @@ void DbSlice::FlushSlots(const cluster::SlotRanges& slot_ranges) {
   auto on_change = [this, shared_slots, next_version, table](DbIndex db_index,
                                                              const ChangeReq& req) {
     FiberAtomicGuard fg;
+    auto mem_accounting = CommandMemoryAccountingScope::Gap();
 
     auto process_bucket = [&](PrimeTable::bucket_iterator it) {
       std::string tmp;
