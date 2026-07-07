@@ -5,15 +5,12 @@
 #pragma once
 
 #include <absl/base/internal/spinlock.h>
-#include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/inlined_vector.h>
 #include <absl/functional/function_ref.h>
 
 #include <atomic>
-// #include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 #include "core/intent_lock.h"
@@ -28,9 +25,30 @@
 namespace dfly {
 
 class BlockingController;
+class EngineShard;
 
 using facade::OpResult;
 using facade::OpStatus;
+
+class CommandMemoryAccountingScope {
+ public:
+  explicit CommandMemoryAccountingScope(size_t family);
+
+  static CommandMemoryAccountingScope Gap();
+
+  CommandMemoryAccountingScope(const CommandMemoryAccountingScope&) = delete;
+  CommandMemoryAccountingScope& operator=(const CommandMemoryAccountingScope&) = delete;
+  ~CommandMemoryAccountingScope();
+
+ private:
+  explicit CommandMemoryAccountingScope(std::optional<size_t> family);
+
+  EngineShard* shard_;
+  std::optional<size_t> family_;
+  int64_t baseline_;
+  uint64_t generation_;
+  CommandMemoryAccountingScope* parent_;
+};
 
 // Central building block of the transactional framework.
 //

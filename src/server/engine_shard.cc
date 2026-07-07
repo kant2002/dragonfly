@@ -345,7 +345,7 @@ std::optional<CollectedPageStats> EngineShard::DoDefrag(PageUsage* page_usage) {
   // are done using fibers, This fiber is run only when no other fiber in the
   // context of the controlling thread will access this shard!
   // --------------------------------------------------------------------------
-  AbortCommandMemoryAccounting();
+  auto mem_accounting = CommandMemoryAccountingScope::Gap();
 
   // TODO: enable tiered storage on non-default db slice
   DbSlice& slice = namespaces->GetDefaultNamespace().GetDbSlice(shard_->shard_id());
@@ -878,6 +878,8 @@ void EngineShard::RetireExpiredAndEvict() {
   vector<vector<string>> per_db_events(db_slice.db_array_size());
 
   {
+    auto mem_accounting = CommandMemoryAccountingScope::Gap();
+
     // Disable journal flush to prevent preemption. Scoped so that SendMessages below,
     // which may suspend on backpressure, runs outside the atomic section.
     journal::DisableFlushGuard journal_flush_guard(journal_);

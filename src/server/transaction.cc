@@ -39,54 +39,54 @@ atomic_uint64_t op_seq{1};
 
 constexpr size_t kTransSize [[maybe_unused]] = sizeof(Transaction);
 
-class CommandMemoryAccountingScope;
-
 thread_local CommandMemoryAccountingScope* current_mem_accounting_scope = nullptr;
 thread_local uint64_t mem_accounting_generation = 0;
 
-class CommandMemoryAccountingScope {
- public:
-  explicit CommandMemoryAccountingScope(size_t family)
-      : shard_(EngineShard::tlocal()),
-        family_(family),
-        baseline_(shard_->UsedMemoryForCommandAccounting()),
-        generation_(mem_accounting_generation),
-        parent_(current_mem_accounting_scope) {
-    DCHECK(shard_);
-    current_mem_accounting_scope = this;
+}  // namespace
+
+CommandMemoryAccountingScope::CommandMemoryAccountingScope(size_t family)
+    : CommandMemoryAccountingScope(std::optional{family}) {
+}
+
+CommandMemoryAccountingScope CommandMemoryAccountingScope::Gap() {
+  return CommandMemoryAccountingScope{std::nullopt};
+}
+
+CommandMemoryAccountingScope::CommandMemoryAccountingScope(std::optional<size_t> family)
+    : shard_(EngineShard::tlocal()),
+      family_(family),
+      baseline_(shard_->UsedMemoryForCommandAccounting()),
+      generation_(mem_accounting_generation),
+      parent_(current_mem_accounting_scope) {
+  DCHECK(shard_);
+  current_mem_accounting_scope = this;
+}
+
+CommandMemoryAccountingScope::~CommandMemoryAccountingScope() {
+  if (generation_ != mem_accounting_generation) {
+    return;
   }
 
-  CommandMemoryAccountingScope(const CommandMemoryAccountingScope&) = delete;
-  CommandMemoryAccountingScope& operator=(const CommandMemoryAccountingScope&) = delete;
-
-  ~CommandMemoryAccountingScope() {
-    if (generation_ != mem_accounting_generation) {
-      return;
-    }
-
-    if (current_mem_accounting_scope != this) {
-      AbortCommandMemoryAccounting();
-      return;
-    }
-
-    DCHECK_EQ(shard_, EngineShard::tlocal());
-    int64_t delta = shard_->UsedMemoryForCommandAccounting() - baseline_;
-    shard_->AddCommandFamilyMemDelta(family_, delta);
-
-    if (parent_) {
-      parent_->baseline_ += delta;
-    }
-
-    current_mem_accounting_scope = parent_;
+  if (current_mem_accounting_scope != this) {
+    AbortCommandMemoryAccounting();
+    return;
   }
 
- private:
-  EngineShard* shard_;
-  size_t family_;
-  int64_t baseline_;
-  uint64_t generation_;
-  CommandMemoryAccountingScope* parent_;
-};
+  DCHECK_EQ(shard_, EngineShard::tlocal());
+  int64_t delta = shard_->UsedMemoryForCommandAccounting() - baseline_;
+
+  if (family_) {
+    shard_->AddCommandFamilyMemDelta(*family_, delta);
+  }
+
+  if (parent_) {
+    parent_->baseline_ += delta;
+  }
+
+  current_mem_accounting_scope = parent_;
+}
+
+namespace {
 
 void AnalyzeTxQueue(const EngineShard* shard, const TxQueue* txq) {
   unsigned q_limit = absl::GetFlag(FLAGS_tx_queue_warning_len);
