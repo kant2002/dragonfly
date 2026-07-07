@@ -48,12 +48,17 @@ Configuration via environment variables:
 | `AFL_PROACTOR_THREADS` | `1` | Server threads (1 = most stable coverage) |
 | `AFL_LOOP_LIMIT` | `10000` | Iterations before server restart (= `AFL_PERSISTENT_RECORD`) |
 | `AFL_ENABLE_SAVE` | off | Set to `1` to enable SAVE/BGSAVE (tests snapshot serialization) |
+| `AFL_ENABLE_TIERING` | off | Set to `1` to enable tiered storage with fuzzing defaults |
 | `BUILD_DIR` | `build-dbg` | Path to build directory |
 
 Save mode (`AFL_ENABLE_SAVE=1`) enables `--dbfilename=dump` and writes snapshots
-to a temp directory. Enabled automatically in nightly (long) fuzzing campaigns.
+to a temp directory. It is currently disabled in nightly (long) fuzzing campaigns.
 The dump directory is cleaned before each AFL++ loop cycle to ensure RECORD files
 capture the full state needed for crash reproduction.
+
+Tiering mode (`AFL_ENABLE_TIERING=1`) uses a `/tmp` tiered file prefix, forces
+offloading, disables the cooling layer so values become truly external, and writes
+the tiering flags to `repro.env` for crash reproduction.
 
 ## Custom Mutators
 

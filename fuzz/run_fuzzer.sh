@@ -28,6 +28,7 @@ AFL_MEM_MB="${AFL_MEM_MB:-4096}"  # Memory limit (MB) passed to afl-fuzz -m; als
 # for replay. Without this, state from earlier iterations is lost and crashes become
 # non-reproducible. Max recommended by AFL++: 10000.
 AFL_LOOP_LIMIT="${AFL_LOOP_LIMIT:-10000}"
+TIERING_ARGS=()
 
 print_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -70,6 +71,31 @@ setup_directories() {
         DB_FILENAME=""
     fi
 
+    TIERING_ARGS=()
+    if [[ "${AFL_ENABLE_TIERING:-}" == "1" ]]; then
+        TIERED_PREFIX="${AFL_TIERED_PREFIX:-/tmp/dragonfly-fuzz-tiered-${TARGET}}"
+        TIERED_MAX_FILE_SIZE="${AFL_TIERED_MAX_FILE_SIZE:-536870912}"
+        TIERED_MIN_VALUE_SIZE="${AFL_TIERED_MIN_VALUE_SIZE:-64}"
+        TIERED_MAX_PENDING_STASH_BYTES="${AFL_TIERED_MAX_PENDING_STASH_BYTES:-33554432}"
+        TIERED_OFFLOAD_THRESHOLD="${AFL_TIERED_OFFLOAD_THRESHOLD:-1.0}"
+        TIERED_UPLOAD_THRESHOLD="${AFL_TIERED_UPLOAD_THRESHOLD:-0.0}"
+        TIERED_EXPERIMENTAL_COOLING="${AFL_TIERED_EXPERIMENTAL_COOLING:-false}"
+
+        mkdir -p "$(dirname "${TIERED_PREFIX}")"
+        rm -f "${TIERED_PREFIX}"-*.dts
+
+        TIERING_ARGS=(
+            "--tiered_prefix=${TIERED_PREFIX}"
+            "--tiered_max_file_size=${TIERED_MAX_FILE_SIZE}"
+            "--tiered_min_value_size=${TIERED_MIN_VALUE_SIZE}"
+            "--tiered_max_pending_stash_bytes=${TIERED_MAX_PENDING_STASH_BYTES}"
+            "--tiered_offload_threshold=${TIERED_OFFLOAD_THRESHOLD}"
+            "--tiered_upload_threshold=${TIERED_UPLOAD_THRESHOLD}"
+            "--tiered_experimental_cooling=${TIERED_EXPERIMENTAL_COOLING}"
+        )
+        print_info "Tiering enabled - prefix: ${TIERED_PREFIX}"
+    fi
+
     if [[ -z "$(ls -A "$CORPUS_DIR" 2>/dev/null)" ]]; then
         if [[ -d "${SEEDS_DIR}" ]] && [[ -n "$(ls -A "${SEEDS_DIR}" 2>/dev/null)" ]]; then
             print_info "Copying seeds to corpus..."
@@ -98,6 +124,14 @@ show_config() {
     echo "  Memory limit:     ${AFL_MEM_MB}MB"
     echo "  Loop limit:      ${AFL_LOOP_LIMIT} (= AFL_PERSISTENT_RECORD)"
     echo "  Save mode:       ${AFL_ENABLE_SAVE:-off}"
+    echo "  Tiering:         ${AFL_ENABLE_TIERING:-off}"
+    if [[ ${#TIERING_ARGS[@]} -gt 0 ]]; then
+        echo "  Tiered prefix:   ${TIERED_PREFIX}"
+        echo "  Tiered max file: ${TIERED_MAX_FILE_SIZE}"
+        echo "  Offload ratio:   ${TIERED_OFFLOAD_THRESHOLD}"
+        echo "  Upload ratio:    ${TIERED_UPLOAD_THRESHOLD}"
+        echo "  Cooling:         ${TIERED_EXPERIMENTAL_COOLING}"
+    fi
     echo ""
     print_note "Fuzzing integrated in dragonfly (USE_AFL + persistent mode)"
     print_note "Usage: ./run_fuzzer.sh [resp|memcache]"
@@ -122,6 +156,9 @@ write_repro_env() {
         echo "--omit_basic_usage"
         echo "--restricted_commands=SHUTDOWN,DEBUG,FLUSHALL,FLUSHDB"
         echo "--max_bulk_len=1048576"
+        if [[ ${#TIERING_ARGS[@]} -gt 0 ]]; then
+            printf '%s\n' "${TIERING_ARGS[@]}"
+        fi
         [[ "$TARGET" == "memcache" ]] && echo "--memcached_port=11211"
     } > "$out"
     print_info "Reproduction environment: ${out}"
@@ -158,6 +195,8 @@ run_fuzzer() {
         --restricted_commands=SHUTDOWN,DEBUG,FLUSHALL,FLUSHDB
         --max_bulk_len=1048576
     )
+
+    AFL_CMD+=("${TIERING_ARGS[@]}")
 
     [[ -n "$DB_DIR" ]] && AFL_CMD+=(--dir="${DB_DIR}")
 

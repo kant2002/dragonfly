@@ -54,6 +54,8 @@ jobs:
         with:
           mode: long
           target: ${{ matrix.target }}
+          enable-tiering: 'true'
+          enable-save: 'false'
           duration-minutes: ${{ matrix.target == 'resp' && (github.event.inputs.resp_duration || matrix.duration) || (github.event.inputs.memcache_duration || matrix.duration) }}
           run-number: ${{ github.run_number }}
 

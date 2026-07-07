@@ -31,6 +31,14 @@ inputs:
     description: "Build the binary before fuzzing. Set to 'false' when reusing a binary built by a previous action call in the same job — fails if the binary is missing."
     required: false
     default: 'true'
+  enable-tiering:
+    description: "Set to 'true' to enable tiered storage during fuzzing"
+    required: false
+    default: 'false'
+  enable-save:
+    description: "Set to 'true' to enable SAVE/BGSAVE, 'false' to disable, or 'auto' for long-mode default"
+    required: false
+    default: 'auto'
 
 outputs:
   hang_count:
@@ -107,6 +115,8 @@ runs:
         echo "  Target: ${{ inputs.target }}"
         echo "  Mode: ${MODE}"
         echo "  Duration: ${DURATION_MINUTES} minutes"
+        echo "  Tiering: ${{ inputs.enable-tiering }}"
+        echo "  SAVE/BGSAVE: ${{ inputs.enable-save }}"
 
         cd fuzz
         export BUILD_DIR="${GITHUB_WORKSPACE}/build-dbg"
@@ -138,7 +148,8 @@ runs:
         # afl-fuzz OOM (exit 137). The custom mutator uses a bounded command/key/value
         # vocabulary, keeping the queue and memory bounded.
         AFL_CUSTOM_MUTATOR_ONLY: 1
-        AFL_ENABLE_SAVE: ${{ inputs.mode == 'long' && '1' || '' }}
+        AFL_ENABLE_SAVE: ${{ inputs.enable-save == 'true' && '1' || (inputs.enable-save == 'auto' && inputs.mode == 'long' && '1' || '') }}
+        AFL_ENABLE_TIERING: ${{ inputs.enable-tiering == 'true' && '1' || '' }}
         FUZZ_FOCUS_COMMANDS: ${{ inputs.focus-commands }}
 
     - name: Analyze fuzzing results
