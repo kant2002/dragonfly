@@ -1528,7 +1528,11 @@ OpStatus Transaction::RunSquashedMultiCb(RunnableType cb) {
     shard->set_running_tx(this);
   }
 
-  auto result = cb(this, shard);
+  RunnableResult result;
+  {
+    CommandMemoryAccountingScope mem_accounting{cid_->GetFamily()};
+    result = cb(this, shard);
+  }
   db_slice.OnCbFinishBlocking();
 
   LogAutoJournalOnShard(shard, result);
