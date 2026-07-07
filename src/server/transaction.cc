@@ -65,7 +65,7 @@ class CommandMemoryAccountingScope {
     }
 
     if (current_mem_accounting_scope != this) {
-      Abort();
+      AbortCommandMemoryAccounting();
       return;
     }
 
@@ -78,15 +78,6 @@ class CommandMemoryAccountingScope {
     }
 
     current_mem_accounting_scope = parent_;
-  }
-
-  static void Abort() {
-    if (!current_mem_accounting_scope) {
-      return;
-    }
-
-    ++mem_accounting_generation;
-    current_mem_accounting_scope = nullptr;
   }
 
  private:
@@ -141,6 +132,15 @@ uint16_t trans_id(const Transaction* ptr) {
 }
 
 }  // namespace
+
+void AbortCommandMemoryAccounting() {
+  if (!current_mem_accounting_scope) {
+    return;
+  }
+
+  ++mem_accounting_generation;
+  current_mem_accounting_scope = nullptr;
+}
 
 bool Transaction::BatonBarrier::IsClaimed() const {
   return claimed_.load(memory_order_relaxed);

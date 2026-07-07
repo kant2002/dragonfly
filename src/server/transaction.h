@@ -682,4 +682,6 @@ template <typename F> auto Transaction::ScheduleSingleHopT(F&& f) -> decltype(f(
 
 OpResult<KeyIndex> DetermineKeys(const CommandId* cid, const facade::ParsedArgs& args);
 
+void AbortCommandMemoryAccounting();
+
 }  // namespace dfly
